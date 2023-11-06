@@ -1,2 +1,2 @@
-void initializeSensorPins();
-int getSensorValue(ParkingSpot& spot);
+void initializeSensorPins(ParkingSpot spots[]);
+int getSensorValue(ParkingSpot& spot, bool backIn);

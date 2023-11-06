@@ -1,8 +1,16 @@
 #include <EEPROM.h>
 #include "types.h"
 #include "lidar.h"
+#include <TFMPlus.h>
+#include "printf.h"   // Modified to support Intel based Arduino
+#include <SoftwareSerial.h>
 
-const int CLOCK_RATE_HZ = 10;
+const SoftwareSerial sensorSerial1 (10, 9, false);
+const SoftwareSerial sensorSerial2 (12, 11, false);
+// const SoftwareSerial sensorSerial3 (14, 13, false);
+// const SoftwareSerial sensorSerial4 (16, 15, false);
+
+const int CLOCK_RATE_HZ = 100;
 const int TICK = 1000 / CLOCK_RATE_HZ;
 
 ParkingSpotPins createPins(int cutLights) {
@@ -11,22 +19,12 @@ ParkingSpotPins createPins(int cutLights) {
   return p;
 }
 
-ParkingSpot createSpot(ParkingSpotPins pins) {
-  // TODO: Store Pin locations and pass in as parameters to this constructor
-  ParkingSpot s;
-  s.pins = pins;
-  s.backInDistance = 0;
-  s.doorIntersectDistance = 0;
-  s.enableAllLEDs = true;
-  s.enableCutLights = false;
-  s.lastChangeTimestamp = millis();
-  return s;
-}
+ParkingSpot spot1 (createPins(4), sensorSerial1, sensorSerial2);
+ParkingSpot spot2 (createPins(5), sensorSerial1, sensorSerial2);
 
-const int NUMBER_OF_SPOTS = 2;
-ParkingSpot spot1 = createSpot(createPins(4));
-ParkingSpot spot2 = createSpot(createPins(5));
-ParkingSpot spots[NUMBER_OF_SPOTS] = {spot1, spot2};
+// TODO: Update to two spots when I have the sensors
+const int NUMBER_OF_SPOTS = 1;
+ParkingSpot spots[NUMBER_OF_SPOTS] = {spot1};
 
 const int CONFIG_BUTTON_PIN = 2;
 bool configurationButtonPressed = false;
@@ -35,19 +33,22 @@ bool enableDebugLED = false;
 
 void setup() {
   // Setup Serial
-  Serial.begin(9600);
+  Serial.begin(115200);
+  delay(200);
+
+  printf_begin(); 
 
   // Load Configuration From Disk
   int address = 0;
-  EEPROM.get(address, spot1.config);
-  address += sizeof(spot1.config);
-  EEPROM.get(address, spot2.config);
+  EEPROM.get(address, spots[0].config);
+  address += sizeof(spots[0].config);
+  EEPROM.get(address, spots[1].config);
 
   // Initialize Pins
-  initializeSensorPins();
+  initializeSensorPins(spots);
   pinMode(CONFIG_BUTTON_PIN, INPUT);
-  pinMode(spot1.pins.cutLights, OUTPUT);
-  pinMode(spot2.pins.cutLights, OUTPUT);
+  pinMode(spots[0].pins.cutLights, OUTPUT);
+  pinMode(spots[1].pins.cutLights, OUTPUT);
   
   // DEBUG LED PIN
   pinMode(LED_BUILTIN, OUTPUT);
@@ -71,10 +72,10 @@ void loop() {
     }
   }
 
-  // UPDATE CONFIG 
+  // Update Config on Button Press
   updateConfigStateIfNeeded();
 
-  // DEBUG
+  // Blink Debug LED
   enableDebugLED = !enableDebugLED;
   digitalWrite(LED_BUILTIN, enableDebugLED ? HIGH : LOW);
 
@@ -86,25 +87,34 @@ void updateConfigStateIfNeeded() {
   bool previousConfigButtonState = configurationButtonPressed;
   configurationButtonPressed = digitalRead(CONFIG_BUTTON_PIN) == HIGH;
 
-  Serial.println(configurationButtonPressed);
-
   if(configurationButtonPressed && previousConfigButtonState != configurationButtonPressed) {
-    Serial.println("Button Clicked");
+    for (int i = 0; i < NUMBER_OF_SPOTS; i++) {
+      Serial.println("Writing Config Spot " + String(i + 1) + ":");
+      Serial.println("Door Intersect - " + String(spots[i].doorIntersectDistance));
+      Serial.println("Back In        - " + String(spots[i].backInDistance));
+
+      spots[i].config.backInDistance = spots[i].backInDistance;
+      spots[i].config.intersectDistance = spots[i].doorIntersectDistance;
+
+      EEPROM.put(i * sizeof(spots[i]), spots[i].config);
+    }
   }
 }
 
+// TODO: Extract refactor the timestamp updates
+const int UPDATE_TIMESTAMP_THRESHOLD = 6;
 void updateDoorIntersectDistance(ParkingSpot& spot) {
   int previousDistance = spot.doorIntersectDistance;
-  spot.doorIntersectDistance = getSensorValue(spot);
-  if(previousDistance != spot.doorIntersectDistance) {
+  spot.doorIntersectDistance = getSensorValue(spot, false);
+  if(abs(previousDistance - spot.doorIntersectDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
     spot.lastChangeTimestamp = millis();
   }
 }
 
 void updateBackInDistance(ParkingSpot& spot) {
   int previousDistance = spot.backInDistance;
-  spot.backInDistance = getSensorValue(spot);
-  if(previousDistance != spot.backInDistance) {
+  spot.backInDistance = getSensorValue(spot, true);
+  if(abs(previousDistance - spot.backInDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
     spot.lastChangeTimestamp = millis();
   }
 }
