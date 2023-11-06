@@ -17,16 +17,21 @@ ParkingSpot createSpot(ParkingSpotPins pins) {
   s.pins = pins;
   s.backInDistance = 0;
   s.doorIntersectDistance = 0;
-  s.enableAllLEDs = false;
+  s.enableAllLEDs = true;
   s.enableCutLights = false;
   s.lastChangeTimestamp = millis();
   return s;
 }
 
 const int NUMBER_OF_SPOTS = 2;
-ParkingSpot spot1 = createSpot(createPins(13));
-ParkingSpot spot2 = createSpot(createPins(9));
+ParkingSpot spot1 = createSpot(createPins(4));
+ParkingSpot spot2 = createSpot(createPins(5));
 ParkingSpot spots[NUMBER_OF_SPOTS] = {spot1, spot2};
+
+const int CONFIG_BUTTON_PIN = 2;
+bool configurationButtonPressed = false;
+
+bool enableDebugLED = false;
 
 void setup() {
   // Setup Serial
@@ -35,22 +40,20 @@ void setup() {
   // Load Configuration From Disk
   int address = 0;
   EEPROM.get(address, spot1.config);
-  address += sizeof(spot1Config);
+  address += sizeof(spot1.config);
   EEPROM.get(address, spot2.config);
 
   // Initialize Pins
   initializeSensorPins();
-
+  pinMode(CONFIG_BUTTON_PIN, INPUT);
   pinMode(spot1.pins.cutLights, OUTPUT);
   pinMode(spot2.pins.cutLights, OUTPUT);
   
   // DEBUG LED PIN
-  // TODO: Remove
   pinMode(LED_BUILTIN, OUTPUT);
 }
 
 void loop() {
-  
   for (int i = 0; i < NUMBER_OF_SPOTS; i++) {
     // Read Sensor Data and Update State
     updateDoorIntersectDistance(spots[i]);
@@ -60,23 +63,34 @@ void loop() {
     
     // Render LEDs
     if(!spots[i].enableAllLEDs) {
-      // digitalWrite(spots[i].pins.cutLights, LOW);
+      digitalWrite(spots[i].pins.cutLights, LOW);
       // TODO: Write LOW to other LEDs
     } else {
-      // digitalWrite(spots[i].pins.cutLights, spots[i].enableCutLights ? HIGH : LOW);
+      digitalWrite(spots[i].pins.cutLights, spots[i].enableCutLights ? HIGH : LOW);
       // TODO: Write GlideSlopeLeds
     }
   }
 
+  // UPDATE CONFIG 
+  updateConfigStateIfNeeded();
+
+  // DEBUG
+  enableDebugLED = !enableDebugLED;
+  digitalWrite(LED_BUILTIN, enableDebugLED ? HIGH : LOW);
+
   // Delay
   delay(TICK);
+}
 
-  // DEBUG LED
-  // TODO: Remove
-  digitalWrite(LED_BUILTIN, HIGH);  // turn the LED on (HIGH is the voltage level)
-  delay(100);                      // wait for a second
-  digitalWrite(LED_BUILTIN, LOW);   // turn the LED off by making the voltage LOW
-  delay(1000);                      // wait for a second
+void updateConfigStateIfNeeded() {
+  bool previousConfigButtonState = configurationButtonPressed;
+  configurationButtonPressed = digitalRead(CONFIG_BUTTON_PIN) == HIGH;
+
+  Serial.println(configurationButtonPressed);
+
+  if(configurationButtonPressed && previousConfigButtonState != configurationButtonPressed) {
+    Serial.println("Button Clicked");
+  }
 }
 
 void updateDoorIntersectDistance(ParkingSpot& spot) {
@@ -105,7 +119,7 @@ void enableAllLEDsIfNeeded(ParkingSpot& spot) {
   spot.enableAllLEDs = currentTime - spot.lastChangeTimestamp < ALL_LED_TIMEOUT;
 }
 
-const int CUT_LIGHT_THRESHOLD = 10;
+const int CUT_LIGHT_THRESHOLD = 50;
 void enableCutLightsIfNeeded(ParkingSpot& spot) {
   spot.enableCutLights = abs(spot.config.intersectDistance - spot.doorIntersectDistance) < CUT_LIGHT_THRESHOLD;
 }
