@@ -20,7 +20,7 @@ int getSensorValue(ParkingSpot& spot, bool backIn) {
   while(!distance) {
     sensor.getData(distance,flux, temp);
     if(!distance) {
-      Serial.println("Retrying " + type);      
+      delay(50);
     }
   }
   

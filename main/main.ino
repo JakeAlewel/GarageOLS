@@ -5,28 +5,32 @@
 #include "printf.h"   // Modified to support Intel based Arduino
 #include <SoftwareSerial.h>
 
-const SoftwareSerial sensorSerial1 (10, 9, false);
-const SoftwareSerial sensorSerial2 (12, 11, false);
+const SoftwareSerial sensorSerial1 (2, 3, false);
+const SoftwareSerial sensorSerial2 (4, 5, false);
 // const SoftwareSerial sensorSerial3 (14, 13, false);
 // const SoftwareSerial sensorSerial4 (16, 15, false);
 
 const int CLOCK_RATE_HZ = 100;
 const int TICK = 1000 / CLOCK_RATE_HZ;
 
-ParkingSpotPins createPins(int cutLights) {
+ParkingSpotPins createPins(int cutLights, int notCutLights, int good, int warn, int bad) {
   ParkingSpotPins p;
   p.cutLights = cutLights;
+  p.notCutLights = notCutLights;
+  p.good = good;
+  p.warn = warn;
+  p.bad = bad;
   return p;
 }
 
-ParkingSpot spot1 (createPins(4), sensorSerial1, sensorSerial2);
-ParkingSpot spot2 (createPins(5), sensorSerial1, sensorSerial2);
+ParkingSpot spot1 (createPins(7, 6, 9, 10, 11), sensorSerial1, sensorSerial2);
+ParkingSpot spot2 (createPins(7, 6, 9, 10, 11), sensorSerial1, sensorSerial2);
 
 // TODO: Update to two spots when I have the sensors
 const int NUMBER_OF_SPOTS = 1;
 ParkingSpot spots[NUMBER_OF_SPOTS] = {spot1};
 
-const int CONFIG_BUTTON_PIN = 2;
+const int CONFIG_BUTTON_PIN = 12;
 bool configurationButtonPressed = false;
 
 bool enableDebugLED = false;
@@ -47,8 +51,14 @@ void setup() {
   // Initialize Pins
   initializeSensorPins(spots);
   pinMode(CONFIG_BUTTON_PIN, INPUT);
-  pinMode(spots[0].pins.cutLights, OUTPUT);
-  pinMode(spots[1].pins.cutLights, OUTPUT);
+
+  for (int i = 0; i < NUMBER_OF_SPOTS; i++) {
+    pinMode(spots[i].pins.cutLights, OUTPUT);
+    pinMode(spots[i].pins.notCutLights, OUTPUT);
+    pinMode(spots[i].pins.good, OUTPUT);
+    pinMode(spots[i].pins.warn, OUTPUT);
+    pinMode(spots[i].pins.bad, OUTPUT);
+  }
   
   // DEBUG LED PIN
   pinMode(LED_BUILTIN, OUTPUT);
@@ -65,10 +75,25 @@ void loop() {
     // Render LEDs
     if(!spots[i].enableAllLEDs) {
       digitalWrite(spots[i].pins.cutLights, LOW);
+      digitalWrite(spots[i].pins.notCutLights, LOW);
+      digitalWrite(spots[i].pins.good, LOW);
+      digitalWrite(spots[i].pins.warn, LOW);
+      digitalWrite(spots[i].pins.bad, LOW);
       // TODO: Write LOW to other LEDs
     } else {
       digitalWrite(spots[i].pins.cutLights, spots[i].enableCutLights ? HIGH : LOW);
-      // TODO: Write GlideSlopeLeds
+      digitalWrite(spots[i].pins.notCutLights, spots[i].enableCutLights ? LOW : HIGH);
+
+
+      int configDistance = spots[i].config.backInDistance;
+      int step = (configDistance / 6);
+      int goodBreakpoint = configDistance - step;
+      int warnBreakpoint = configDistance - (step * 2);
+      int currentDistance = spots[i].backInDistance;
+
+      digitalWrite(spots[i].pins.good, configDistance > currentDistance && currentDistance >= goodBreakpoint ? HIGH : LOW);
+      digitalWrite(spots[i].pins.warn, goodBreakpoint > currentDistance && currentDistance > warnBreakpoint ? HIGH : LOW);
+      digitalWrite(spots[i].pins.bad, warnBreakpoint >= currentDistance ? HIGH : LOW);
     }
   }
 

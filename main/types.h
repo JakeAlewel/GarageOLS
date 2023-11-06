@@ -8,6 +8,10 @@ struct StoredConfiguration {
 
 struct ParkingSpotPins {
   int cutLights;
+  int notCutLights;
+  int good;
+  int warn;
+  int bad;
 };
 
 struct ParkingSpot {
