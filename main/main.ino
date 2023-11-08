@@ -165,17 +165,15 @@ void updateBackInDistance(ParkingSpot& spot) {
   }
 }
 
-const unsigned long ALL_LED_TIMEOUT = 1000 * 10; // 10 seconds
+const unsigned long ALL_LED_TIMEOUT = (unsigned long)1000UL * 10UL; // 10 seconds
 void enableAllLEDsIfNeeded(ParkingSpot& spot) {
   unsigned long currentTime = millis();
   // Handle the rollover of millis after ~41 days
-
-  // if(spot.lastChangeTimestamp != 32768 && currentTime < spot.lastChangeTimestamp) {
-  //   Serial.println(spot.lastChangeTimestamp);
-  //   spot.lastChangeTimestamp = currentTime;
-  // }
-
-  Serial.println(String(currentTime) + " " + String(spot.lastChangeTimestamp) + " " + String(currentTime - spot.lastChangeTimestamp));
+  if(spot.lastChangeTimestamp != 32768 && currentTime < spot.lastChangeTimestamp) {
+    Serial.println(spot.lastChangeTimestamp);
+    spot.lastChangeTimestamp = currentTime;
+  }
+  
   spot.enableAllLEDs = currentTime - spot.lastChangeTimestamp < ALL_LED_TIMEOUT;
 }
 

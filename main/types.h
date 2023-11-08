@@ -26,13 +26,10 @@ struct ParkingSpot {
   bool enableAllLEDs = false;
   bool enableCutLights = false;
 
-  static const int NUM_OLS_LEDS = 50;
-
-  CRGB leds[NUM_OLS_LEDS];
-
   unsigned long lastChangeTimestamp;
 
-  ParkingSpot(ParkingSpotPins _pins, SoftwareSerial _backIn, SoftwareSerial _intersect): pins(_pins), backInSerial(_backIn), doorIntersectSerial(_intersect) {
-    lastChangeTimestamp = 0;
-  };
+  static const int NUM_OLS_LEDS = 50;
+  CRGB leds[NUM_OLS_LEDS];
+
+  ParkingSpot(ParkingSpotPins _pins, SoftwareSerial _backIn, SoftwareSerial _intersect): pins(_pins), backInSerial(_backIn), doorIntersectSerial(_intersect) {};
 };
