@@ -1,5 +1,6 @@
 #include <TFMPlus.h>
 #include <SoftwareSerial.h>
+#include <FastLED.h>
 
 struct StoredConfiguration {
   int intersectDistance;
@@ -7,11 +8,7 @@ struct StoredConfiguration {
 };
 
 struct ParkingSpotPins {
-  int cutLights;
-  int notCutLights;
-  int good;
-  int warn;
-  int bad;
+  int ols;
 };
 
 struct ParkingSpot {
@@ -29,7 +26,13 @@ struct ParkingSpot {
   bool enableAllLEDs = false;
   bool enableCutLights = false;
 
+  static const int NUM_OLS_LEDS = 50;
+
+  CRGB leds[NUM_OLS_LEDS];
+
   unsigned long lastChangeTimestamp;
 
-  ParkingSpot(ParkingSpotPins _pins, SoftwareSerial _backIn, SoftwareSerial _intersect): pins(_pins), backInSerial(_backIn), doorIntersectSerial(_intersect) {};
+  ParkingSpot(ParkingSpotPins _pins, SoftwareSerial _backIn, SoftwareSerial _intersect): pins(_pins), backInSerial(_backIn), doorIntersectSerial(_intersect) {
+    lastChangeTimestamp = 0;
+  };
 };
