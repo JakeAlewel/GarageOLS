@@ -35,6 +35,9 @@ bool configurationButtonPressed = false;
 
 bool enableDebugLED = false;
 
+const float EMERGENCY_WAVE_OFF_THRESHOLD = 2/3.0f;
+const float WAVE_OFF_THRESHOLD = 1/13.0f;
+
 void setup() {
   // Setup Serial
   Serial.begin(115200);
@@ -73,40 +76,63 @@ void loop() {
     enableAllLEDsIfNeeded(spots[i]);
     enableCutLightsIfNeeded(spots[i]);
     
+
+    // Clear All LEDs
+    writeLEDRange(spots[i].leds, 0, spots[i].NUM_OLS_LEDS, CRGB::Black);
+
     // Render LEDs
-    if(!spots[i].enableAllLEDs) {
-      writeLEDRange(spots[i].leds, 0, spots[i].NUM_OLS_LEDS, CRGB::Black);
-      // for(int j = 0; j < spots[i].NUM_OLS_LEDS; j++) {
-      //   spots[i].leds[j] = CRGB::Black;
-      // }
-    } else {
-      writeLEDRange(spots[i].leds, 0, spots[i].NUM_OLS_LEDS, CRGB::Black);
-      // for(int j = 0; j < spots[i].NUM_OLS_LEDS; j++) {
-      //   spots[i].leds[j] = CRGB::Black;
-      // }
-
+    if(spots[i].enableAllLEDs) {
+      // Cut Lights
+      writeLEDRange(spots[i].leds, 30, spots[i].NUM_OLS_LEDS - 30, spots[i].enableCutLights ? CRGB::Green : CRGB::Red);
       CRGB::HTMLColorCode cutLightColor = spots[i].enableCutLights ? CRGB::Green : CRGB::Black;
-      writeLEDRange(spots[i].leds, 30, spots[i].NUM_OLS_LEDS, cutLightColor);
-      writeLEDRange(spots[i].leds, 7, 8, cutLightColor);
-      writeLEDRange(spots[i].leds, 11, 12, cutLightColor);
+      writeLEDRange(spots[i].leds, 7, 2, cutLightColor);
+      writeLEDRange(spots[i].leds, 11, 2, cutLightColor);
 
+      // Range Lights
+      int configDistance = spots[i].config.backInDistance;
+      int currentDistance = spots[i].backInDistance;
+      int step = (configDistance / 6);
+      int warnBreakpoint = configDistance - (step * 2);
+      float progress = (float)(configDistance - currentDistance) / warnBreakpoint;
 
-      // digitalWrite(spots[i].pins.cutLights, spots[i].enableCutLights ? HIGH : LOW);
-      // digitalWrite(spots[i].pins.notCutLights, spots[i].enableCutLights ? LOW : HIGH);
+      // Wave off lights
+      CRGB::HTMLColorCode emergencyWaveOffLightColor = CRGB::Black;
+      CRGB::HTMLColorCode waveOffLightColor = CRGB::Black;
+      if(progress > EMERGENCY_WAVE_OFF_THRESHOLD ) {
+        emergencyWaveOffLightColor = CRGB::Red;
+        waveOffLightColor = CRGB::Red;
+      } else if (progress > WAVE_OFF_THRESHOLD) {
+        waveOffLightColor = CRGB::Yellow;
+      }
 
+      writeLEDRange(spots[i].leds, 1, 2, emergencyWaveOffLightColor);
+      spots[i].leds[26] = emergencyWaveOffLightColor;
+      spots[i].leds[28] = emergencyWaveOffLightColor;
+      
+      writeLEDRange(spots[i].leds, 3, 4, waveOffLightColor);
+      writeLEDRange(spots[i].leds, 9, 2, waveOffLightColor);
+      spots[i].leds[27] = waveOffLightColor;
+      spots[i].leds[29] = waveOffLightColor;
 
-      // int configDistance = spots[i].config.backInDistance;
-      // int step = (configDistance / 6);
-      // int goodBreakpoint = configDistance - step;
-      // int warnBreakpoint = configDistance - (step * 2);
-      // int currentDistance = spots[i].backInDistance;
+      // Meatball Lights
+      float absProgress = abs(progress);
+      CRGB::HTMLColorCode rangeLightColor = CRGB::Black;
 
-      // digitalWrite(spots[i].pins.good, configDistance > currentDistance && currentDistance >= goodBreakpoint ? HIGH : LOW);
-      // digitalWrite(spots[i].pins.warn, goodBreakpoint > currentDistance && currentDistance > warnBreakpoint ? HIGH : LOW);
-      // digitalWrite(spots[i].pins.bad, warnBreakpoint >= currentDistance ? HIGH : LOW);
+      if(absProgress > EMERGENCY_WAVE_OFF_THRESHOLD ) {
+        rangeLightColor = CRGB::Red;
+      } else if (absProgress > WAVE_OFF_THRESHOLD) {
+        rangeLightColor = CRGB::Yellow;
+      } else {
+        rangeLightColor = CRGB::Green;
+      }
+
+      int rangeLightsStart = 13;
+      int rangeLightsCount = 13;
+      for (int j = 0; j < 13; j++) {
+        int isLit = progress * rangeLightsCount / 2 + (float)rangeLightsCount / 2;
+        spots[i].leds[j + rangeLightsStart] = abs(isLit - j) <= 1 ? rangeLightColor : CRGB::Black;
+      }
     }
-
-    // FastLED[i].showLeds();
   }
   FastLED.show();
 
@@ -121,9 +147,9 @@ void loop() {
   // delay(TICK);
 }
 
-void writeLEDRange(CRGB leds[], int start, int end, CRGB::HTMLColorCode value) {
-  for (int i = start; i<= end; i++) {
-    leds[i] = value;
+void writeLEDRange(CRGB leds[], int start, int count, CRGB::HTMLColorCode value) {
+  for (int i = 0; i < count; i++) {
+    leds[i + start] = value;
   }
 }
 
@@ -146,12 +172,11 @@ void updateConfigStateIfNeeded() {
 }
 
 // TODO: Extract refactor the timestamp updates
-const int UPDATE_TIMESTAMP_THRESHOLD = 6;
+const int UPDATE_TIMESTAMP_THRESHOLD = 3;
 void updateDoorIntersectDistance(ParkingSpot& spot) {
   int previousDistance = spot.doorIntersectDistance;
   spot.doorIntersectDistance = getSensorValue(spot, false);
   if(abs(previousDistance - spot.doorIntersectDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
-    Serial.println("Updating Timestamp Cut Light");
     spot.lastChangeTimestamp = millis();
   }
 }
@@ -160,20 +185,19 @@ void updateBackInDistance(ParkingSpot& spot) {
   int previousDistance = spot.backInDistance;
   spot.backInDistance = getSensorValue(spot, true);
   if(abs(previousDistance - spot.backInDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
-    Serial.println("Updating Timestamp Back In");
     spot.lastChangeTimestamp = millis();
   }
 }
 
-const unsigned long ALL_LED_TIMEOUT = (unsigned long)1000UL * 10UL; // 10 seconds
+const unsigned long ALL_LED_TIMEOUT = (unsigned long)1000UL * 20UL; // 20 seconds
 void enableAllLEDsIfNeeded(ParkingSpot& spot) {
   unsigned long currentTime = millis();
   // Handle the rollover of millis after ~41 days
-  if(spot.lastChangeTimestamp != 32768 && currentTime < spot.lastChangeTimestamp) {
+  if(currentTime < spot.lastChangeTimestamp) {
     Serial.println(spot.lastChangeTimestamp);
     spot.lastChangeTimestamp = currentTime;
   }
-  
+
   spot.enableAllLEDs = currentTime - spot.lastChangeTimestamp < ALL_LED_TIMEOUT;
 }
 
