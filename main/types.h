@@ -26,6 +26,8 @@ struct ParkingSpot {
   bool enableAllLEDs = false;
   bool enableCutLights = false;
 
+  int lastChangeDoorIntersect = 0;
+  int lastChangeBackIn = 0;
   unsigned long lastChangeTimestamp;
 
   static const int NUM_OLS_LEDS = 50;

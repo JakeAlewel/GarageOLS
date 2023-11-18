@@ -75,25 +75,29 @@ void loop() {
     updateBackInDistance(spots[i]);
     enableAllLEDsIfNeeded(spots[i]);
     enableCutLightsIfNeeded(spots[i]);
-    
 
     // Clear All LEDs
     writeLEDRange(spots[i].leds, 0, spots[i].NUM_OLS_LEDS, CRGB::Black);
 
     // Render LEDs
     if(spots[i].enableAllLEDs) {
-      // Cut Lights
-      writeLEDRange(spots[i].leds, 30, spots[i].NUM_OLS_LEDS - 30, spots[i].enableCutLights ? CRGB::Green : CRGB::Red);
-      CRGB::HTMLColorCode cutLightColor = spots[i].enableCutLights ? CRGB::Green : CRGB::Black;
-      writeLEDRange(spots[i].leds, 7, 2, cutLightColor);
-      writeLEDRange(spots[i].leds, 11, 2, cutLightColor);
 
-      // Range Lights
+      // Solve For Range
       int configDistance = spots[i].config.backInDistance;
       int currentDistance = spots[i].backInDistance;
       int step = (configDistance / 6);
       int warnBreakpoint = configDistance - (step * 2);
       float progress = (float)(configDistance - currentDistance) / warnBreakpoint;
+
+      // Cut Lights
+      CRGB::HTMLColorCode cutLightBarColor = (spots[i].enableCutLights && progress <= EMERGENCY_WAVE_OFF_THRESHOLD) ? CRGB::Green : CRGB::Red;
+      writeLEDRange(spots[i].leds, 0, 7, cutLightBarColor);
+      writeLEDRange(spots[i].leds, 12, 13, cutLightBarColor);
+      writeLED(spots[i].leds, 35, cutLightBarColor);
+      writeLEDRange(spots[i].leds, 40, 48, cutLightBarColor);
+      CRGB::HTMLColorCode cutLightColor = (spots[i].enableCutLights && progress <= EMERGENCY_WAVE_OFF_THRESHOLD) ? CRGB::Green : CRGB::Black;
+      writeLEDRange(spots[i].leds, 16, 17, cutLightColor);
+      writeLEDRange(spots[i].leds, 37, 38, cutLightColor);
 
       // Wave off lights
       CRGB::HTMLColorCode emergencyWaveOffLightColor = CRGB::Black;
@@ -105,14 +109,17 @@ void loop() {
         waveOffLightColor = CRGB::Yellow;
       }
 
-      writeLEDRange(spots[i].leds, 1, 2, emergencyWaveOffLightColor);
-      spots[i].leds[26] = emergencyWaveOffLightColor;
-      spots[i].leds[28] = emergencyWaveOffLightColor;
+      writeLEDRange(spots[i].leds, 9, 10, emergencyWaveOffLightColor);
+      writeLEDRange(spots[i].leds, 31, 32, emergencyWaveOffLightColor);
       
-      writeLEDRange(spots[i].leds, 3, 4, waveOffLightColor);
-      writeLEDRange(spots[i].leds, 9, 2, waveOffLightColor);
-      spots[i].leds[27] = waveOffLightColor;
-      spots[i].leds[29] = waveOffLightColor;
+      writeLED(spots[i].leds, 8, waveOffLightColor);
+      writeLED(spots[i].leds, 11, waveOffLightColor);
+      writeLED(spots[i].leds, 14, waveOffLightColor);
+      writeLED(spots[i].leds, 15, waveOffLightColor);
+      writeLED(spots[i].leds, 33, waveOffLightColor);
+      writeLED(spots[i].leds, 34, waveOffLightColor);
+      writeLED(spots[i].leds, 36, waveOffLightColor);
+      writeLED(spots[i].leds, 39, waveOffLightColor);
 
       // Meatball Lights
       float absProgress = abs(progress);
@@ -126,7 +133,7 @@ void loop() {
         rangeLightColor = CRGB::Green;
       }
 
-      int rangeLightsStart = 13;
+      int rangeLightsStart = 18;
       int rangeLightsCount = 13;
       for (int j = 0; j < 13; j++) {
         int isLit = progress * rangeLightsCount / 2 + (float)rangeLightsCount / 2;
@@ -147,9 +154,13 @@ void loop() {
   // delay(TICK);
 }
 
-void writeLEDRange(CRGB leds[], int start, int count, CRGB::HTMLColorCode value) {
-  for (int i = 0; i < count; i++) {
-    leds[i + start] = value;
+void writeLED(CRGB leds[], int index, CRGB::HTMLColorCode value) {
+  leds[index] = value;
+}
+
+void writeLEDRange(CRGB leds[], int start, int end, CRGB::HTMLColorCode value) {
+  for (int i = start; i <= end; i++) {
+    leds[i] = value;
   }
 }
 
@@ -172,20 +183,22 @@ void updateConfigStateIfNeeded() {
 }
 
 // TODO: Extract refactor the timestamp updates
-const int UPDATE_TIMESTAMP_THRESHOLD = 3;
+const int UPDATE_TIMESTAMP_THRESHOLD = 2;
 void updateDoorIntersectDistance(ParkingSpot& spot) {
-  int previousDistance = spot.doorIntersectDistance;
   spot.doorIntersectDistance = getSensorValue(spot, false);
-  if(abs(previousDistance - spot.doorIntersectDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
+
+  if(abs(spot.lastChangeDoorIntersect - spot.doorIntersectDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
     spot.lastChangeTimestamp = millis();
+    spot.lastChangeDoorIntersect = spot.doorIntersectDistance;
   }
 }
 
 void updateBackInDistance(ParkingSpot& spot) {
-  int previousDistance = spot.backInDistance;
   spot.backInDistance = getSensorValue(spot, true);
-  if(abs(previousDistance - spot.backInDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
+
+  if(abs(spot.lastChangeBackIn - spot.backInDistance) > UPDATE_TIMESTAMP_THRESHOLD) {
     spot.lastChangeTimestamp = millis();
+    spot.lastChangeBackIn = spot.backInDistance;
   }
 }
 
