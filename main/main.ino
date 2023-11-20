@@ -1,18 +1,15 @@
-#include <EEPROM.h>
 #include "types.h"
 #include "lidar.h"
+#include <FastLED.h>
 #include <TFMPlus.h>
 #include "printf.h"   // Modified to support Intel based Arduino
+#include <EEPROM.h>
 #include <SoftwareSerial.h>
-#include <FastLED.h>
 
 const SoftwareSerial sensorSerial1 (2, 3, false);
 const SoftwareSerial sensorSerial2 (4, 5, false);
 // const SoftwareSerial sensorSerial3 (14, 13, false);
 // const SoftwareSerial sensorSerial4 (16, 15, false);
-
-const int CLOCK_RATE_HZ = 10;
-const int TICK = 1000 / CLOCK_RATE_HZ;
 
 ParkingSpotPins createPins(int ols) {
   ParkingSpotPins p;
@@ -29,14 +26,19 @@ ParkingSpot spot2 (createPins(SPOT_TWO_OLS_PIN), sensorSerial1, sensorSerial2);
 // TODO: Update to two spots when I have the sensors
 const int NUMBER_OF_SPOTS = 1;
 ParkingSpot spots[NUMBER_OF_SPOTS] = {spot1};
+const int RANGE_LIGHT_COUNT = 13;
 
 const int CONFIG_BUTTON_PIN = 12;
 bool configurationButtonPressed = false;
 
 bool enableDebugLED = false;
 
-const float EMERGENCY_WAVE_OFF_THRESHOLD = 2/3.0f;
-const float WAVE_OFF_THRESHOLD = 1/13.0f;
+const float EMERGENCY_WAVE_OFF_THRESHOLD = -0.66f;
+const float WAVE_OFF_THRESHOLD = -0.1f;
+const float ABS_EMERGENCY_WAVE_OFF_THRESHOLD = abs(EMERGENCY_WAVE_OFF_THRESHOLD);
+const float ABS_WAVE_OFF_THRESHOLD = abs(WAVE_OFF_THRESHOLD);
+
+const int MAX_BRIGHTNESS = 20;
 
 void setup() {
   // Setup Serial
@@ -59,10 +61,7 @@ void setup() {
   pinMode(CONFIG_BUTTON_PIN, INPUT);
 
   FastLED.addLeds<WS2811, SPOT_ONE_OLS_PIN, RGB>(spots[0].leds, spots[0].NUM_OLS_LEDS);  
-  // FastLED.addLeds<WS2811, SPOT_TWO_OLS_PIN, RGB>(spots[1].leds, spots[1].NUM_OLS_LEDS);  
-  
-
-  FastLED.setBrightness(20);
+  // FastLED.addLeds<WS2811, SPOT_TWO_OLS_PIN, RGB>(spots[1].leds, spots[1].NUM_OLS_LEDS);
   
   // DEBUG LED PIN
   pinMode(LED_BUILTIN, OUTPUT);
@@ -77,36 +76,37 @@ void loop() {
     enableCutLightsIfNeeded(spots[i]);
 
     // Clear All LEDs
+    FastLED.setBrightness(0);
     writeLEDRange(spots[i].leds, 0, spots[i].NUM_OLS_LEDS, CRGB::Black);
 
     // Render LEDs
     if(spots[i].enableAllLEDs) {
+      FastLED.setBrightness(MAX_BRIGHTNESS);
 
       // Solve For Range
       int configDistance = spots[i].config.backInDistance;
       int currentDistance = spots[i].backInDistance;
-      int step = (configDistance / 6);
-      int warnBreakpoint = configDistance - (step * 2);
-      float progress = (float)(configDistance - currentDistance) / warnBreakpoint;
+      float targetRange = 2.0f * (float)configDistance / 3.0f;
+      float progress = (currentDistance - configDistance) / ((2.0f/3.0f) * targetRange);
 
       // Cut Lights
-      CRGB::HTMLColorCode cutLightBarColor = (spots[i].enableCutLights && progress <= EMERGENCY_WAVE_OFF_THRESHOLD) ? CRGB::Green : CRGB::Red;
+      CRGB::HTMLColorCode cutLightBarColor = (spots[i].enableCutLights && progress > EMERGENCY_WAVE_OFF_THRESHOLD) ? CRGB::Green : CRGB::Red;
       writeLEDRange(spots[i].leds, 0, 7, cutLightBarColor);
       writeLEDRange(spots[i].leds, 12, 13, cutLightBarColor);
       writeLED(spots[i].leds, 35, cutLightBarColor);
       writeLEDRange(spots[i].leds, 40, 48, cutLightBarColor);
-      CRGB::HTMLColorCode cutLightColor = (spots[i].enableCutLights && progress <= EMERGENCY_WAVE_OFF_THRESHOLD) ? CRGB::Green : CRGB::Black;
+      CRGB::HTMLColorCode cutLightColor = (spots[i].enableCutLights && progress > EMERGENCY_WAVE_OFF_THRESHOLD) ? CRGB::Green : CRGB::Black;
       writeLEDRange(spots[i].leds, 16, 17, cutLightColor);
       writeLEDRange(spots[i].leds, 37, 38, cutLightColor);
 
       // Wave off lights
       CRGB::HTMLColorCode emergencyWaveOffLightColor = CRGB::Black;
       CRGB::HTMLColorCode waveOffLightColor = CRGB::Black;
-      if(progress > EMERGENCY_WAVE_OFF_THRESHOLD ) {
+      if(progress < EMERGENCY_WAVE_OFF_THRESHOLD ) {
         emergencyWaveOffLightColor = CRGB::Red;
         waveOffLightColor = CRGB::Red;
-      } else if (progress > WAVE_OFF_THRESHOLD) {
-        waveOffLightColor = CRGB::Yellow;
+      } else if (progress < WAVE_OFF_THRESHOLD) {
+        waveOffLightColor = CRGB::Orange;
       }
 
       writeLEDRange(spots[i].leds, 9, 10, emergencyWaveOffLightColor);
@@ -125,19 +125,23 @@ void loop() {
       float absProgress = abs(progress);
       CRGB::HTMLColorCode rangeLightColor = CRGB::Black;
 
-      if(absProgress > EMERGENCY_WAVE_OFF_THRESHOLD ) {
+      if(absProgress > ABS_EMERGENCY_WAVE_OFF_THRESHOLD ) {
         rangeLightColor = CRGB::Red;
-      } else if (absProgress > WAVE_OFF_THRESHOLD) {
-        rangeLightColor = CRGB::Yellow;
+      } else if (absProgress > ABS_WAVE_OFF_THRESHOLD) {
+        rangeLightColor = CRGB::Orange;
       } else {
         rangeLightColor = CRGB::Green;
       }
 
-      int rangeLightsStart = 18;
-      int rangeLightsCount = 13;
-      for (int j = 0; j < 13; j++) {
-        int isLit = progress * rangeLightsCount / 2 + (float)rangeLightsCount / 2;
-        spots[i].leds[j + rangeLightsStart] = abs(isLit - j) <= 1 ? rangeLightColor : CRGB::Black;
+      int centerLEDIndex = RANGE_LIGHT_COUNT / 2;
+      float progressCenteredLEDIndex = -progress * centerLEDIndex + centerLEDIndex;
+
+      for (int j = 0; j < RANGE_LIGHT_COUNT; j++) {
+        float distanceToCenter = abs(j - progressCenteredLEDIndex) / 1.75f;
+        float clippedFade = clip(distanceToCenter * 255, 0, 255);
+        
+        spots[i].leds[18 + j] = blend(rangeLightColor, CRGB::Black, (uint8_t)clippedFade);
+        fadeToBlackBy()
       }
     }
   }
@@ -149,9 +153,10 @@ void loop() {
   // Blink Debug LED
   enableDebugLED = !enableDebugLED;
   digitalWrite(LED_BUILTIN, enableDebugLED ? HIGH : LOW);
+}
 
-  // Delay
-  // delay(TICK);
+float clip(float n, float lower, float upper) {
+  return max(lower, min(n, upper));
 }
 
 void writeLED(CRGB leds[], int index, CRGB::HTMLColorCode value) {
